@@ -1,48 +1,43 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.21;
 
-contract Borrow {
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+contract Borrow is ReentrancyGuard {
     uint constant RAY = 1e18;
     uint public globalBorrowIndex = RAY;
-    uint public interest;
-    uint constant baseInterest = 3e16;
-    uint public lastUpdatedTime;
+    uint public borrowInterest;
+    uint constant baseBorrowInterest = 3e16;
+    uint public lastUpdateBorrowIndex;
     uint public totalLiquidity;
     uint public totalBorrowedAmount;
     uint public totalNumberOfBorrowers;
     uint public totalCollateralDeposited;
-    bool locked;
     struct Borrower {
-        uint borrowedAmount;
         uint collateral;
+        uint borrowedAmount;
         uint userIndex;
         uint canBorrowMore;
     }
     mapping(address => Borrower) public borrower;
 
-    modifier nonReenterant() {
-        require(!locked, "No Reenterant");
-        locked = true;
-        _;
-        locked = false;
-    }
     constructor() payable {
-        lastUpdatedTime = block.timestamp;
-        interest = baseInterest;
+        lastUpdateBorrowIndex = block.timestamp;
+        borrowInterest = baseBorrowInterest;
         totalLiquidity += msg.value;
     }
     function updateIndex() public {
-        uint timeElapsed = block.timestamp - lastUpdatedTime;
+        updateborrowInterest();
+        uint timeElapsed = block.timestamp - lastUpdateBorrowIndex;
         if (timeElapsed > 0) {
-            uint ratePerSecond = (interest * timeElapsed) / (365 days);
+            uint ratePerSecond = (borrowInterest * timeElapsed) / (365 days);
             globalBorrowIndex += (globalBorrowIndex * ratePerSecond) / RAY;
-            lastUpdatedTime = block.timestamp;
+            lastUpdateBorrowIndex = block.timestamp;
         }
-        updateInterest();
     }
-    function updateInterest() public {
+    function updateborrowInterest() public {
         if (totalLiquidity == 0) {
-            interest = baseInterest;
+            borrowInterest = baseBorrowInterest;
             return;
         }
         uint utilization = (totalBorrowedAmount * RAY) / totalLiquidity;
@@ -50,15 +45,14 @@ contract Borrow {
         uint slope2 = 3e17;
         uint utilizationMax = 8e17;
         if (utilization < utilizationMax) {
-            interest = baseInterest + (utilization * slope1) / RAY;
+            borrowInterest = baseBorrowInterest + (utilization * slope1) / RAY;
         } else {
-            interest =
-                baseInterest +
+            borrowInterest =
+                baseBorrowInterest +
                 (utilizationMax * slope1) / RAY +
                 ((utilization - utilizationMax) * slope2) / RAY;
         }
     }
-    function updateStakeAPY() public {}
     function depositCollateral() public payable {
         Borrower storage b = borrower[msg.sender];
         require(msg.value > 0, "Must Greater Than 0 ETH");
@@ -68,7 +62,31 @@ contract Borrow {
         totalCollateralDeposited += amount;
         updateIndex();
     }
-    function withdrawCollateral(uint _amount) public nonReenterant {
+    function borrow(uint _amount) public nonReentrant {
+        updateIndex();
+        Borrower storage b = borrower[msg.sender];
+        uint amount = b.collateral;
+        require(amount > 0, "No Deposited Collateral");
+        require(
+            _amount <= b.canBorrowMore,
+            "Can't Reach More Than 50% Of Your Max Balance"
+        );
+        if(b.borrowedAmount>=0){
+            uint newAmount = viewDEBT(msg.sender);
+            b.borrowedAmount = newAmount;
+        }else{
+            totalNumberOfBorrowers ++;
+        }
+        b.userIndex = globalBorrowIndex;
+        if (totalLiquidity < _amount) revert("Insufficient Liquidity");
+        totalBorrowedAmount += _amount;
+        b.borrowedAmount += _amount;
+        b.canBorrowMore -= _amount;
+        totalLiquidity -= _amount;
+        (bool success, ) = payable(msg.sender).call{value: _amount}("");
+        require(success, "Transaction Failed");
+    }
+    function withdrawCollateral(uint _amount) public nonReentrant {
         updateIndex();
         Borrower storage b = borrower[msg.sender];
         uint amount = b.collateral;
@@ -82,73 +100,53 @@ contract Borrow {
         if (b.collateral == 0) {
             delete borrower[msg.sender];
         }
-        (bool success, ) = payable(msg.sender).call{value: _amount}("");
+        (bool success, ) = payable(msg.sender).call{value: _amount}("hello()");
         require(success, "Transaction Failed");
     }
-    function repay() public payable nonReenterant {
+    function repay() public payable nonReentrant {
         updateIndex();
         uint freeAmount;
         Borrower storage b = borrower[msg.sender];
         uint debt = viewDEBT(msg.sender);
-        uint amount = debt;
-        require(amount != 0, "No Amount To Repay");
-        require(
-            msg.value >= amount,
-            "Must Send Greater Than Amount Of Total DEBT"
-        );
-        if (msg.value > amount) {
-            freeAmount = msg.value - amount;
+        uint repayAmount = msg.value;
+        require(debt != 0, "No Amount To Repay");
+        require(repayAmount > 0, "Must Send Greater Than 0 ETH");
+        if (repayAmount > debt) {
+            freeAmount = repayAmount - debt;
+            repayAmount = debt;
         }
-        if (totalBorrowedAmount <= amount) {
-            totalBorrowedAmount = 0;
+        uint newDebt = debt - repayAmount;
+        if (newDebt == 0) {
+            b.userIndex = 0;
+            b.borrowedAmount = 0;
+            b.canBorrowMore = 0;
+            if (totalNumberOfBorrowers > 0) {
+                totalNumberOfBorrowers--;
+            }
         } else {
-            totalBorrowedAmount -= amount;
-        }
-        totalLiquidity += amount;
-        b.borrowedAmount = 0;
-        b.userIndex = 0;
-        b.canBorrowMore = 0;
-        totalNumberOfBorrowers--;
-        (bool success, ) = payable(msg.sender).call{value: freeAmount}("");
-        require(success, "Transaction Failed");
-    }
-    function borrow(uint _amount) public nonReenterant {
-        updateIndex();
-        Borrower storage b = borrower[msg.sender];
-        uint amount = b.collateral;
-        require(amount > 0, "No Deposited Collateral");
-        uint maxAllowed = (amount * 5000) / 10000;
-        require(
-            _amount <= maxAllowed,
-            "Max 50% Allowed To Borrow Of User Balance"
-        );
-        require(
-            _amount <= b.canBorrowMore,
-            "Can't Reach More Than 50% Of Your Max Balance"
-        );
-        if (b.borrowedAmount == 0) {
+            require(b.borrowedAmount != 0, "No Borrowed Amount");
+            b.borrowedAmount = (newDebt * globalBorrowIndex) / b.userIndex;
             b.userIndex = globalBorrowIndex;
-            totalNumberOfBorrowers++;
+            b.canBorrowMore = (b.borrowedAmount * 5000) / 10000;
         }
-        if (totalLiquidity < _amount) revert("Insufficient Liquidity");
-        totalBorrowedAmount += _amount;
-        b.borrowedAmount += _amount;
-        b.canBorrowMore -= _amount;
-        totalLiquidity -= _amount;
-        (bool success, ) = payable(msg.sender).call{value: _amount}("");
-        require(success, "Transaction Failed");
+        totalLiquidity += repayAmount;
+        require(totalBorrowedAmount >= repayAmount, "Accounting Error");
+        totalBorrowedAmount -= repayAmount;
+        if (freeAmount != 0) {
+            (bool success, ) = payable(msg.sender).call{value: freeAmount}("");
+            require(success, "Transaction Failed");
+        }
     }
     function viewDEBT(address _user) public view returns (uint) {
         Borrower memory b = borrower[_user];
-        if (b.borrowedAmount == 0) return 0;
-        if (b.userIndex == 0) return b.borrowedAmount;
+        if (b.borrowedAmount == 0) return (0);
+        if (b.userIndex == 0) return (0);
         uint debt = ((b.borrowedAmount * globalBorrowIndex) / b.userIndex);
         return (debt);
     }
-    function withdrawAll() public {
-        (bool success, ) = payable(msg.sender).call{
-            value: address(this).balance
-        }("");
-        require(success, "Tranasction Failed");
+    receive() external payable {
+        revert("Use Official Website For Deposits And Borrowing");
     }
+    fallback() external payable {}
+
 }
