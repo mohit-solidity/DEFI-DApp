@@ -2,6 +2,7 @@
 pragma solidity ^0.8.21;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./libraries/Math.sol";
 
 /// @title Borrow Contract - Index-based Lending Systemnpm install @openzeppelin/contracts
 /// @author Mohit
@@ -59,9 +60,9 @@ contract Borrow is ReentrancyGuard {
         uint timeElapsed = block.timestamp - lastUpdateBorrowIndex;
 
         if (timeElapsed > 0) {
-            uint ratePerSecond = (borrowInterest * timeElapsed) / (365 days);
+            uint ratePerSecond = Math.div(Math.mul(borrowInterest, timeElapsed),365 days);
 
-            globalBorrowIndex += (globalBorrowIndex * ratePerSecond) / RAY;
+            globalBorrowIndex += Math.div(Math.mul(globalBorrowIndex,ratePerSecond),RAY);
 
             lastUpdateBorrowIndex = block.timestamp;
         }
@@ -74,14 +75,14 @@ contract Borrow is ReentrancyGuard {
             return;
         }
 
-        uint utilization = (totalBorrowedAmount * RAY) / totalLiquidity;
+        uint utilization = Math.div(Math.mul(totalBorrowedAmount,RAY),totalLiquidity);
 
         uint slope1 = 1e17;
         uint slope2 = 3e17;
         uint utilizationMax = 8e17;
 
         if (utilization < utilizationMax) {
-            borrowInterest = baseBorrowInterest + (utilization * slope1) / RAY;
+            borrowInterest = baseBorrowInterest + Math.div(Math.mul(utilization,slope1),RAY);
         } else {
             borrowInterest =
                 baseBorrowInterest +
@@ -95,7 +96,7 @@ contract Borrow is ReentrancyGuard {
     function depositCollateral() public payable {
         Borrower storage b = borrower[msg.sender];
 
-        require(msg.value > 0, "Must Greater Than 0 ETH");
+        require(msg.value > 0 && msg.value<=10000 ether, "Must Greater Than 0 ETH");
 
         uint amount = msg.value;
 

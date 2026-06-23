@@ -27,7 +27,7 @@ library Math{
     }
     function mul(uint256 a,uint256 b) internal pure returns(uint256){
         if(a==0 || b==0) return(0);
-        if(a>type(uint256).max/b) revert Overrflow();
+        if(a>type(uint256).max/b) revert Overflow();
         unchecked {
             return((a*b)/BASE);
         }
