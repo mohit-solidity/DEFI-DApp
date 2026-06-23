@@ -3,7 +3,7 @@ pragma solidity ^0.8.21;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-/// @title Borrow Contract - Index-based Lending System
+/// @title Borrow Contract - Index-based Lending Systemnpm install @openzeppelin/contracts
 /// @author Mohit
 /// @notice Implements borrowing, repayment, and collateral management with interest accrual
 contract Borrow is ReentrancyGuard {
