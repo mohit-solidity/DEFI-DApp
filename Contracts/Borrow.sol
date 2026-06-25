@@ -9,12 +9,12 @@ import "./libraries/Math.sol";
 /// @notice Implements borrowing, repayment, and collateral management with interest accrual
 contract Borrow is ReentrancyGuard {
 
-    uint constant RAY = 1e18;
+    uint constant BASE = 1e18;
 
     /// @dev Global index used to scale borrowed amounts over time
-    uint public globalBorrowIndex = RAY;
+    uint public globalBorrowIndex = BASE;
 
-    /// @dev Current borrow interest rate (per year, scaled by RAY)
+    /// @dev Current borrow interest rate (per year, scaled by BASE)
     uint public borrowInterest;
 
     /// @dev Base borrow interest rate
@@ -37,7 +37,7 @@ contract Borrow is ReentrancyGuard {
 
     /// @dev Struct representing a borrower
     struct Borrower {
-        uint collateral;        // Collateral deposited
+        uint collateral;       // Collateral deposited
         uint borrowedAmount;   // Scaled borrowed amount
         uint userIndex;        // User's borrow index snapshot
         uint canBorrowMore;    // Remaining borrow capacity
@@ -62,7 +62,7 @@ contract Borrow is ReentrancyGuard {
         if (timeElapsed > 0) {
             uint ratePerSecond = Math.div(Math.mul(borrowInterest, timeElapsed),365 days);
 
-            globalBorrowIndex += Math.div(Math.mul(globalBorrowIndex,ratePerSecond),RAY);
+            globalBorrowIndex += Math.div(Math.mul(globalBorrowIndex,ratePerSecond),BASE);
 
             lastUpdateBorrowIndex = block.timestamp;
         }
@@ -75,19 +75,19 @@ contract Borrow is ReentrancyGuard {
             return;
         }
 
-        uint utilization = Math.div(Math.mul(totalBorrowedAmount,RAY),totalLiquidity);
+        uint utilization = Math.div(Math.mul(totalBorrowedAmount,BASE),totalLiquidity);
 
         uint slope1 = 1e17;
         uint slope2 = 3e17;
         uint utilizationMax = 8e17;
 
         if (utilization < utilizationMax) {
-            borrowInterest = baseBorrowInterest + Math.div(Math.mul(utilization,slope1),RAY);
+            borrowInterest = baseBorrowInterest + Math.div(Math.mul(utilization,slope1),BASE);
         } else {
             borrowInterest =
                 baseBorrowInterest +
-                (utilizationMax * slope1) / RAY +
-                ((utilization - utilizationMax) * slope2) / RAY;
+                (utilizationMax * slope1) / BASE +
+                ((utilization - utilizationMax) * slope2) / BASE;
         }
     }
 
@@ -100,12 +100,14 @@ contract Borrow is ReentrancyGuard {
 
         uint amount = msg.value;
 
-        b.collateral += amount;
-        b.canBorrowMore += (amount * 5000) / 10000;
-
-        totalCollateralDeposited += amount;
+        b.collateral = Math.add(b.collateral,amount);
+        b.canBorrowMore += (amount*5000)/10000;
+        totalCollateralDeposited = Math.add(totalCollateralDeposited, amount);
 
         updateIndex();
+    }
+    function increaseLiquidity(uint _amount) public {
+        totalLiquidity += _amount;
     }
 
     /// @notice Borrow ETH from the protocol

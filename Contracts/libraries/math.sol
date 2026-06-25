@@ -6,7 +6,7 @@ error Underflow();
 error DivisionByZero();
 
 library Math{
-    uint256 internal constant BASE = 1e18;
+    uint256 internal constant BASE = 1e18    ;
 
     function add(uint256 a,uint256 b) internal pure returns(uint256) {
         if(a>type(uint256).max - b) revert Overflow();
@@ -14,13 +14,13 @@ library Math{
             return(a>b?a-b:b-a);
         }
     }
-    function subUNIT(uint256 a,uint256 b) internal pure returns(uint256){
+    function sub_UINT(uint256 a,uint256 b) internal pure returns(uint256){
         require(a>0 && b>0,"Values Can't Be Negative");
         unchecked {
             return(a>b?b-a:a-b);
         }
     }
-    function subINT(int256 a,int256 b) internal pure returns(int256){
+    function sub_INT(int256 a,int256 b) internal pure returns(int256){
         unchecked {
             return(a-b);
         }
