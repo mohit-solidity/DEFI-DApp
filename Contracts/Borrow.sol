@@ -123,7 +123,7 @@ contract Borrow is ReentrancyGuard {
         require(amount > 0, "No Deposited Collateral");
         require(_amount <= b.canBorrowMore, "Exceeds borrow limit");
 
-        if (b.borrowedAmount >= 0) {
+        if (b.borrowedAmount > 0) {
             uint newAmount = viewDEBT(msg.sender);
             b.borrowedAmount = newAmount;
         } else {

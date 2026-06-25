@@ -31,9 +31,14 @@ contract BorrowTest is Test{
         vm.deal(user1,amount);
         vm.prank(user1);
         borrow.depositCollateral{value:amount}();
-        (uint collateral,,,uint canBorrowMore) = borrow.borrower(user1);
+        (uint collateral,uint borrowedAmount,uint userIndex,uint canBorrowMore) = borrow.borrower(user1);
         vm.startPrank(user1);
         borrow.increaseLiquidity(canBorrowMore);
         borrow.borrow(canBorrowMore);
+        (collateral,borrowedAmount,userIndex,) = borrow.borrower(user1);
+        vm.assertEq(borrow.totalNumberOfBorrowers(), 1);
+        vm.assertEq(borrow.totalBorrowedAmount(), canBorrowMore);
+        vm.assertEq(borrowedAmount, canBorrowMore);
+        vm.assertEq(borrow.totalLiquidity(), 0);
     }
 }
