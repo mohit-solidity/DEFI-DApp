@@ -11,13 +11,13 @@ library Math{
     function add(uint256 a,uint256 b) internal pure returns(uint256) {
         if(a>type(uint256).max - b) revert Overflow();
         unchecked {
-            return(a>b?a-b:b-a);
+            return(a+b);
         }
     }
     function sub_UINT(uint256 a,uint256 b) internal pure returns(uint256){
         require(a>0 && b>0,"Values Can't Be Negative");
         unchecked {
-            return(a>b?b-a:a-b);
+            return(a>b?a-b:b-a);
         }
     }
     function sub_INT(int256 a,int256 b) internal pure returns(int256){

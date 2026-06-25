@@ -60,9 +60,9 @@ contract Borrow is ReentrancyGuard {
         uint timeElapsed = block.timestamp - lastUpdateBorrowIndex;
 
         if (timeElapsed > 0) {
-            uint ratePerSecond = Math.div(Math.mul(borrowInterest, timeElapsed),365 days);
+            uint ratePerSecond = (borrowInterest * timeElapsed)/365 days;
 
-            globalBorrowIndex += Math.div(Math.mul(globalBorrowIndex,ratePerSecond),BASE);
+            globalBorrowIndex += (globalBorrowIndex*ratePerSecond)/BASE;
 
             lastUpdateBorrowIndex = block.timestamp;
         }
@@ -120,7 +120,7 @@ contract Borrow is ReentrancyGuard {
 
         uint amount = b.collateral;
 
-        require(amount > 0, "No Deposited Collateral");
+        require(amount > 0 ether, "No Deposited Collateral");
         require(_amount <= b.canBorrowMore, "Exceeds borrow limit");
 
         if (b.borrowedAmount > 0) {
@@ -137,7 +137,6 @@ contract Borrow is ReentrancyGuard {
         totalBorrowedAmount += _amount;
         b.borrowedAmount += _amount;
         b.canBorrowMore -= _amount;
-
         totalLiquidity -= _amount;
 
         (bool success, ) = payable(msg.sender).call{value: _amount}("");
@@ -231,7 +230,7 @@ contract Borrow is ReentrancyGuard {
 
         if (b.borrowedAmount == 0 || b.userIndex == 0) return 0;
 
-        debt = (b.borrowedAmount * globalBorrowIndex) / b.userIndex;
+        debt = (b.borrowedAmount) * globalBorrowIndex / b.userIndex;
     }
 
     /// @dev Prevent direct ETH transfers
